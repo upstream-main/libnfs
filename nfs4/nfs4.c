@@ -649,6 +649,10 @@ nfs4_pdu_note_delay(struct rpc_pdu *pdu, const COMPOUND4args *args)
         }
 }
 
+#define NFS4_DELAY_MAX_ATTEMPTS 8
+#define NFS4_DELAY_BASE_MSECS   100u
+#define NFS4_DELAY_MAX_MSECS    1000u
+
 int
 nfs4_pdu_retry_delay(struct rpc_context *rpc, struct rpc_pdu *pdu,
                      const COMPOUND4res *res)
@@ -659,7 +663,8 @@ nfs4_pdu_retry_delay(struct rpc_context *rpc, struct rpc_pdu *pdu,
         if (!pdu->nfs4_delay_maxres || rpc->nfs4_minorversion != 2 ||
             rpc->is_udp || pdu->msg.body.cbody.cred.oa_flavor != AUTH_SYS || pdu->in.base ||
             pdu->do_not_retry || !pdu->nfs4_slot_held || !res ||
-            res->status != NFS4ERR_DELAY || pdu->nfs4_delay_attempts >= 8) {
+            res->status != NFS4ERR_DELAY ||
+            pdu->nfs4_delay_attempts >= NFS4_DELAY_MAX_ATTEMPTS) {
                 return 0;
         }
         count = res->resarray.resarray_len;
@@ -674,7 +679,8 @@ nfs4_pdu_retry_delay(struct rpc_context *rpc, struct rpc_pdu *pdu,
         pdu->nfs4_slot_held = 0;
         pdu->nfs4_slot_sent = 0;
         delay = pdu->nfs4_delay_attempts < 4 ?
-                100u << pdu->nfs4_delay_attempts : 1000u;
+                NFS4_DELAY_BASE_MSECS << pdu->nfs4_delay_attempts :
+                NFS4_DELAY_MAX_MSECS;
         pdu->nfs4_delay_attempts++;
         pdu->nfs4_delay_until = rpc_current_time() + delay;
 
@@ -706,7 +712,8 @@ nfs4_defer_pdu(struct rpc_context *rpc, struct rpc_pdu *pdu)
 {
         pdu->zdr_decode_buf = NULL;
         pdu->out.num_done = 0;
-        pdu->timeout = pdu->major_timeout = 0;
+        rpc_reset_cursor(rpc, &pdu->in);
+        pdu->timeout = 0;
 #ifdef HAVE_MULTITHREADING
         if (rpc->multithreading_enabled) {
                 nfs_mt_mutex_lock(&rpc->rpc_mutex);
@@ -714,11 +721,48 @@ nfs4_defer_pdu(struct rpc_context *rpc, struct rpc_pdu *pdu)
 #endif
         rpc_enqueue(&rpc->nfs4_delay_queue, pdu);
         rpc->nfs4_delay_queue_len++;
+        rpc_wakeup_service_thread(rpc);
 #ifdef HAVE_MULTITHREADING
         if (rpc->multithreading_enabled) {
                 nfs_mt_mutex_unlock(&rpc->rpc_mutex);
         }
 #endif
+}
+
+/* Milliseconds until the earliest pending DELAY retry, or -1 if none. */
+int
+nfs4_next_delay_msecs(struct rpc_context *rpc)
+{
+        struct rpc_pdu *pdu;
+        uint64_t now, due = 0;
+        int msecs;
+
+#ifdef HAVE_MULTITHREADING
+        if (rpc->multithreading_enabled) {
+                nfs_mt_mutex_lock(&rpc->rpc_mutex);
+        }
+#endif
+        for (pdu = rpc->nfs4_delay_queue.head; pdu; pdu = pdu->next) {
+                if (due == 0 || pdu->nfs4_delay_until < due) {
+                        due = pdu->nfs4_delay_until;
+                }
+        }
+#ifdef HAVE_MULTITHREADING
+        if (rpc->multithreading_enabled) {
+                nfs_mt_mutex_unlock(&rpc->rpc_mutex);
+        }
+#endif
+        if (due == 0) {
+                return -1;
+        }
+
+        now = rpc_current_time();
+        if (now >= due) {
+                return 0;
+        }
+        msecs = (int)(due - now);
+
+        return msecs;
 }
 
 void
@@ -748,6 +792,21 @@ nfs4_service_delayed(struct rpc_context *rpc)
                 nfs_mt_mutex_unlock(&rpc->rpc_mutex);
         }
 #endif
+}
+
+/* Caller holds rpc_mutex. */
+void
+nfs4_requeue_delayed(struct rpc_context *rpc)
+{
+        struct rpc_pdu *pdu, *next;
+
+        for (pdu = rpc->nfs4_delay_queue.head; pdu; pdu = next) {
+                next = pdu->next;
+                rpc_remove_pdu_from_queue(&rpc->nfs4_delay_queue, pdu);
+                rpc->nfs4_delay_queue_len--;
+                pdu->nfs4_delay_until = 0;
+                rpc_return_to_outqueue(rpc, pdu);
+        }
 }
 
 /*

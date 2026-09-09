@@ -2433,6 +2433,10 @@ rpc_reconnect_requeue(struct rpc_context *rpc)
                 rpc->pdu = NULL;
         }
 
+#ifdef HAVE_NFS4_2
+        nfs4_requeue_delayed(rpc);
+#endif /* HAVE_NFS4_2 */
+
 #ifdef HAVE_MULTITHREADING
         if (rpc->multithreading_enabled) {
                 nfs_mt_mutex_unlock(&rpc->rpc_mutex);

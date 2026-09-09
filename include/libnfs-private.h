@@ -1298,6 +1298,8 @@ int nfs4_pdu_retry_delay(struct rpc_context *rpc, struct rpc_pdu *pdu,
                         const COMPOUND4res *res);
 void nfs4_defer_pdu(struct rpc_context *rpc, struct rpc_pdu *pdu);
 void nfs4_service_delayed(struct rpc_context *rpc);
+int nfs4_next_delay_msecs(struct rpc_context *rpc);
+void nfs4_requeue_delayed(struct rpc_context *rpc);
 int nfs4_session_has_free_slot(struct rpc_context *rpc);
 void nfs4_session_mutex_init(struct rpc_context *rpc);
 void nfs4_session_mutex_destroy(struct rpc_context *rpc);

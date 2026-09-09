@@ -188,7 +188,6 @@ EXTERN void nfs_set_security(struct nfs_context *nfs, enum rpc_sec sec);
  */
 EXTERN void nfs_set_readonly(struct nfs_context *nfs, int readonly);
         
-#ifdef HAVE_TLS
 /*
  * Various transport level security values that map to the mount option
  * xprtsec=[none,tls,mtls].
@@ -201,7 +200,6 @@ enum rpc_xprtsec {
 };
 
 EXTERN void nfs_set_xprtsecurity(struct nfs_context *nfs, enum rpc_xprtsec xprtsec);
-#endif /* HAVE_TLS */
 
 /*
  * Used if you need to bind to a specific interface.

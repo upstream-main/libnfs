@@ -701,7 +701,18 @@ void rpc_set_poll_timeout(struct rpc_context *rpc, int poll_timeout)
 
 int rpc_get_poll_timeout(struct rpc_context *rpc)
 {
+#ifdef HAVE_NFS4_2
+	int delay;
+#endif
+
 	assert(rpc->magic == RPC_CONTEXT_MAGIC);
+
+#ifdef HAVE_NFS4_2
+	delay = nfs4_next_delay_msecs(rpc);
+	if (delay >= 0 && (rpc->poll_timeout < 0 || delay < rpc->poll_timeout)) {
+		return delay;
+	}
+#endif /* HAVE_NFS4_2 */
 
 	return rpc->poll_timeout;
 }

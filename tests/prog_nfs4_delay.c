@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Deterministic RPC peer: no NAS, root, kernel mount or second machine needed. */
 #define _GNU_SOURCE
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -278,6 +281,7 @@ static void run(struct scenario scenario)
         CHECK(nfs4_session_init(f.rpc, session, 2) == 0, "create session");
         rpc_set_uid(f.rpc, 1001);
         rpc_set_gid(f.rpc, 1001);
+        rpc_set_poll_timeout(f.rpc, -1);
         for (i = 0; i < scenario.jobs; i++) submit(&f, i);
         while (1) {
                 struct pollfd fd[2] = {
@@ -287,6 +291,17 @@ static void run(struct scenario scenario)
                 CHECK(rpc_current_time() - start < 15000, "%s: deadline exceeded", scenario.name);
                 CHECK(poll(fd, 2, 10) >= 0, "poll");
                 CHECK(rpc_service(f.rpc, fd[0].revents) == 0, "rpc_service: %s", rpc_get_error(f.rpc));
+                if (f.rpc->nfs4_delay_queue_len > 0) {
+                        int tmo = rpc_get_poll_timeout(f.rpc);
+                        CHECK(tmo >= 0 && tmo <= 1000,
+                              "%s: poll timeout %d with a retry pending, "
+                              "a sleeping event loop would miss it",
+                              scenario.name, tmo);
+                } else {
+                        CHECK(rpc_get_poll_timeout(f.rpc) == -1,
+                              "%s: poll timeout shortened with nothing pending",
+                              scenario.name);
+                }
                 if (fd[1].revents & POLLIN) serve(&f);
                 if (scenario.cancel && f.job[0].requests == 1 && !f.job[0].calls &&
                     rpc_queue_length(f.rpc) == 1 && !f.rpc->waitpdu_len && !f.rpc->stats.outqueue_len) {

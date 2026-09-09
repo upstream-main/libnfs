@@ -43,6 +43,14 @@ add_library(ld_timeout SHARED ld_timeout.c)
 set_target_properties(ld_timeout PROPERTIES PREFIX "")
 target_link_libraries(ld_timeout nfs ${DL_LIBRARY})
 
+set(UNIT_TEST_PROGS prog_nfs4_delay)
+
+foreach(TARGET ${UNIT_TEST_PROGS})
+  add_executable(${TARGET} ${TARGET}.c)
+  target_link_libraries(${TARGET} nfs)
+  add_test(NAME ${TARGET} COMMAND ${TARGET})
+endforeach()
+
 file(GLOB TESTS test_*.sh)
 
 file(COPY functions.sh DESTINATION ${CMAKE_CURRENT_BINARY_DIR})

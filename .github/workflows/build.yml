@@ -18,6 +18,7 @@ jobs:
       - run: cmake -D ENABLE_TESTS=yes -B build -G Ninja
       - run: ninja --verbose -C build
       - run: sudo ninja --verbose -C build install
+      - run: ctest --test-dir build --output-on-failure -R '^prog_'
       - run: sudo bash -c "cd build/tests;./test_0100_ls_basic.sh"
       - run: sudo bash -c "cd build/tests;./test_0102_ls_discover_shares.sh"
       - run: sudo bash -c "cd build/tests;./test_0200_stat.sh"

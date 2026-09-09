@@ -243,7 +243,7 @@ static void *nfs_mt_service_thread(void *arg)
                 pfd[nfds].revents = 0;
                 nfds++;
 
-                ret = poll(pfd, nfds, nfs->rpc->poll_timeout);
+                ret = poll(pfd, nfds, rpc_get_poll_timeout(nfs->rpc));
                 if (ret < 0) {
                         nfs_set_error(nfs, "Poll failed: %s", strerror(errno));
                         revents = -1;
